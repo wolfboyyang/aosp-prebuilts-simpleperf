@@ -28,9 +28,16 @@ import os.path
 import re
 import subprocess
 import sys
-from tkFont import *
-from Tkinter import *
-from ttk import *
+
+try:
+    from tkinter import *
+    from tkinter.font import Font
+    from tkinter.ttk import *
+except ImportError:
+    from Tkinter import *
+    from tkFont import Font
+    from ttk import *
+
 from utils import *
 
 PAD_X = 3
@@ -188,7 +195,7 @@ class ReportWindow(object):
     frame = Frame(master)
     frame.pack(fill=BOTH, expand=1)
 
-    font = Font(family='courier', size=10)
+    font = Font(family='courier', size=12)
 
     # Report Context
     for line in report_context:
@@ -279,7 +286,7 @@ def display_report_file(report_file):
 def call_simpleperf_report(args, report_file):
   output_fh = open(report_file, 'w')
   simpleperf_path = get_host_binary_path('simpleperf')
-  args = [simpleperf_path, 'report'] + args
+  args = [simpleperf_path, 'report', '--full-callgraph'] + args
   subprocess.check_call(args, stdout=output_fh)
   output_fh.close()
 

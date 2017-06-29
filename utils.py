@@ -31,6 +31,9 @@ def get_script_dir():
 def is_windows():
     return sys.platform == 'win32' or sys.platform == 'cygwin'
 
+def is_python3():
+    return sys.version_info >= (3, 0)
+
 
 def log_debug(msg):
     logging.debug(msg)
@@ -47,6 +50,17 @@ def log_warning(msg):
 def log_fatal(msg):
     raise Exception(msg)
 
+def str_to_bytes(str):
+    if not is_python3():
+        return str
+    # In python 3, str are wide strings whereas the C api expects 8 bit strings, hence we have to convert
+    # For now using utf-8 as the encoding.
+    return str.encode('utf-8')
+
+def bytes_to_str(bytes):
+    if not is_python3():
+        return bytes
+    return bytes.decode('utf-8')
 
 def get_target_binary_path(arch, binary_name):
     if arch == 'aarch64':
@@ -90,24 +104,30 @@ class AdbHelper(object):
         return self.run_and_return_output(adb_args)[0]
 
 
-    def run_and_return_output(self, adb_args):
+    def run_and_return_output(self, adb_args, stdout_file=None):
         adb_args = [self.adb_path] + adb_args
         log_debug('run adb cmd: %s' % adb_args)
-        subproc = subprocess.Popen(adb_args, stdout=subprocess.PIPE)
-        (stdoutdata, _) = subproc.communicate()
-        result = (subproc.returncode == 0)
+        if stdout_file:
+            with open(stdout_file, 'wb') as stdout_fh:
+                returncode = subprocess.call(adb_args, stdout=stdout_fh)
+            stdoutdata = ''
+        else:
+            subproc = subprocess.Popen(adb_args, stdout=subprocess.PIPE)
+            (stdoutdata, _) = subproc.communicate()
+            returncode = subproc.returncode
+        result = (returncode == 0)
         if stdoutdata:
+            stdoutdata = bytes_to_str(stdoutdata)
             log_debug(stdoutdata)
         log_debug('run adb cmd: %s  [result %s]' % (adb_args, result))
         return (result, stdoutdata)
-
 
     def check_run(self, adb_args):
         self.check_run_and_return_output(adb_args)
 
 
-    def check_run_and_return_output(self, adb_args):
-        result, stdoutdata = self.run_and_return_output(adb_args)
+    def check_run_and_return_output(self, adb_args, stdout_file=None):
+        result, stdoutdata = self.run_and_return_output(adb_args, stdout_file)
         if not result:
             log_fatal('run "adb %s" failed' % adb_args)
         return stdoutdata
@@ -143,7 +163,12 @@ def load_config(config_file):
     if not os.path.exists(config_file):
         log_fatal("can't find config_file: %s" % config_file)
     config = {}
-    execfile(config_file, config)
+    if is_python3():
+        with open(config_file, 'r') as fh:
+            source = fh.read()
+            exec(source, config)
+    else:
+        execfile(config_file, config)
     return config
 
 
